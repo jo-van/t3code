@@ -882,6 +882,8 @@ export type CodexGoalCommand =
   | { readonly type: "resume" }
   | { readonly type: "set"; readonly objective: string };
 
+const encodeCodexGoalPath = Schema.encodeSync(Schema.fromJsonString(Schema.String));
+
 /**
  * Parses a `/goal` message the way the Codex TUI does: `clear`, `pause` and
  * `resume` control the current goal, a bare `/goal` shows it, and any other
@@ -1562,6 +1564,7 @@ export const createCodexAdapterV2 = (
     const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
     const crypto = yield* Crypto.Crypto;
     const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const hostEnvironment = yield* HostProcessEnvironment;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const serverConfig = yield* ServerConfig;
@@ -1593,6 +1596,7 @@ export const createCodexAdapterV2 = (
       clientFactory,
       crypto,
       fileSystem,
+      path,
       idAllocator,
       serverConfig,
       continuationRequests,
@@ -1615,6 +1619,7 @@ const layer: Layer.Layer<
   | FileSystem.FileSystem
   | IdAllocator.IdAllocatorV2
   | McpProviderSessions.McpProviderSessions
+  | Path.Path
   | ServerConfig
 > = Layer.effect(
   ProviderAdapter.ProviderAdapterV2,
@@ -1623,6 +1628,7 @@ const layer: Layer.Layer<
     const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
     const crypto = yield* Crypto.Crypto;
     const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const hostEnvironment = yield* HostProcessEnvironment;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const serverConfig = yield* ServerConfig;
@@ -1634,6 +1640,7 @@ const layer: Layer.Layer<
       clientFactory,
       crypto,
       fileSystem,
+      path,
       idAllocator,
       serverConfig,
       continuationRequests,
@@ -1655,6 +1662,7 @@ export interface CodexAdapterV2Options {
   readonly resolveRuntime?: Effect.Effect<CodexEffectiveRuntime, ProviderSetupError, Scope.Scope>;
   readonly crypto: Crypto.Crypto;
   readonly fileSystem: FileSystem.FileSystem;
+  readonly path: Path.Path;
   readonly idAllocator: IdAllocator.IdAllocatorV2["Service"];
   readonly serverConfig: ServerConfig["Service"];
   /**
@@ -1675,7 +1683,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
   const readMcpSession = (threadId: ThreadId | null) =>
     threadId === null ? Effect.succeed(undefined) : mcpSessions.read(threadId);
-  const { clientFactory, crypto, fileSystem, idAllocator, serverConfig } = adapterOptions;
+  const { clientFactory, crypto, fileSystem, path, idAllocator, serverConfig } = adapterOptions;
   const continuationRequests = adapterOptions.continuationRequests;
 
   return ProviderAdapter.ProviderAdapterV2.of({
@@ -6267,12 +6275,26 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               );
             }
             if (command.type === "set") {
+              let nativeObjective = command.objective;
+              // Codex limits persisted objectives to 4,000 Unicode characters,
+              // but turn input can carry the full brief. Keep a durable copy for
+              // continuations and resumed sessions, outside the project checkout.
+              if (Array.from(command.objective).length > 4_000) {
+                const directory = path.join(serverConfig.stateDir, "codex-goals");
+                const goalPath = path.join(directory, `${yield* crypto.randomUUIDv4}.md`);
+                yield* fileSystem.makeDirectory(directory, { recursive: true, mode: 0o700 });
+                yield* fileSystem.writeFileString(goalPath, command.objective, {
+                  flag: "wx",
+                  mode: 0o600,
+                });
+                nativeObjective = `Complete the full objective in ${encodeCodexGoalPath(goalPath)}. Read that file and satisfy all of its requirements before marking the goal complete.`;
+              }
               // A new objective replaces the goal and its accounting, like the TUI.
               if (current !== null) yield* client.request("thread/goal/clear", { threadId });
               // Paused until our turn runs, so Codex does not start one first.
               const { goal } = yield* client.request("thread/goal/set", {
                 threadId,
-                objective: command.objective,
+                objective: nativeObjective,
                 status: "paused",
               });
               goalsByNativeThread.set(threadId, providerGoalFromCodex(goal));
