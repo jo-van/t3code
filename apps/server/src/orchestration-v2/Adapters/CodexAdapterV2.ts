@@ -1564,7 +1564,6 @@ export const createCodexAdapterV2 = (
     const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
     const crypto = yield* Crypto.Crypto;
     const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const hostEnvironment = yield* HostProcessEnvironment;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const serverConfig = yield* ServerConfig;
@@ -1596,7 +1595,6 @@ export const createCodexAdapterV2 = (
       clientFactory,
       crypto,
       fileSystem,
-      path,
       idAllocator,
       serverConfig,
       continuationRequests,
@@ -1628,7 +1626,6 @@ const layer: Layer.Layer<
     const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
     const crypto = yield* Crypto.Crypto;
     const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const hostEnvironment = yield* HostProcessEnvironment;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const serverConfig = yield* ServerConfig;
@@ -1640,7 +1637,6 @@ const layer: Layer.Layer<
       clientFactory,
       crypto,
       fileSystem,
-      path,
       idAllocator,
       serverConfig,
       continuationRequests,
@@ -1662,7 +1658,6 @@ export interface CodexAdapterV2Options {
   readonly resolveRuntime?: Effect.Effect<CodexEffectiveRuntime, ProviderSetupError, Scope.Scope>;
   readonly crypto: Crypto.Crypto;
   readonly fileSystem: FileSystem.FileSystem;
-  readonly path: Path.Path;
   readonly idAllocator: IdAllocator.IdAllocatorV2["Service"];
   readonly serverConfig: ServerConfig["Service"];
   /**
@@ -1680,10 +1675,11 @@ export interface CodexAdapterV2Options {
 export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
   adapterOptions: CodexAdapterV2Options,
 ) {
+  const path = yield* Path.Path;
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
   const readMcpSession = (threadId: ThreadId | null) =>
     threadId === null ? Effect.succeed(undefined) : mcpSessions.read(threadId);
-  const { clientFactory, crypto, fileSystem, path, idAllocator, serverConfig } = adapterOptions;
+  const { clientFactory, crypto, fileSystem, idAllocator, serverConfig } = adapterOptions;
   const continuationRequests = adapterOptions.continuationRequests;
 
   return ProviderAdapter.ProviderAdapterV2.of({

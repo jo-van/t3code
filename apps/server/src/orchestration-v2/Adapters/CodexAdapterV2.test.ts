@@ -1746,7 +1746,6 @@ describe("CodexAdapterV2 session initialize", () => {
         },
         crypto: yield* Crypto.Crypto,
         fileSystem: yield* FileSystem.FileSystem,
-        path: yield* Path.Path,
         idAllocator: yield* IdAllocator.IdAllocatorV2,
         serverConfig: yield* makeReplayServerConfig(transcript.scenario).pipe(Effect.orDie),
       });
@@ -1964,7 +1963,6 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         clientFactory,
         crypto: yield* Crypto.Crypto,
         fileSystem,
-        path: yield* Path.Path,
         idAllocator,
         serverConfig,
         continuationRequests: {
